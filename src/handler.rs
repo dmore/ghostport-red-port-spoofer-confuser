@@ -1,7 +1,6 @@
+use anyhow::{anyhow, Context, Result};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use rand::Rng;
-use anyhow::{Context, Result, anyhow};
 
 #[derive(Debug, Clone)]
 pub enum Payload {
@@ -28,8 +27,10 @@ pub fn parse_signatures(file_path: &str) -> Result<Vec<Signature>> {
         let payload = if line.contains('(') && line.contains(')') {
             Payload::Regex(line)
         } else {
-            Payload::Raw(unescape_string(&line)
-                .with_context(|| format!("Invalid payload on line {}", index + 1))?)
+            Payload::Raw(
+                unescape_string(&line)
+                    .with_context(|| format!("Invalid payload on line {}", index + 1))?,
+            )
         };
 
         signatures.push(Signature { payload });
@@ -62,7 +63,7 @@ fn unescape_string(s: &str) -> Result<Vec<u8>> {
                         result.extend(b"\\x");
                         result.extend(hex.bytes());
                     }
-                },
+                }
                 Some('0') => result.push(0),
                 Some('n') => result.push(b'\n'),
                 Some('r') => result.push(b'\r'),
@@ -94,10 +95,12 @@ fn generate_regex_match(regex_str: &str) -> Vec<u8> {
             '\\' => {
                 if let Some(next_char) = chars.next() {
                     match next_char {
-                        'd' => result.push(rand::thread_rng().gen_range(b'0'..=b'9') as char),
-                        'w' => result.push(rand::thread_rng().gen_range(b'a'..=b'z') as char),
+                        'd' => result.push(rand::random_range(b'0'..=b'9') as char),
+                        'w' => result.push(rand::random_range(b'a'..=b'z') as char),
                         'x' => {
-                            let hex = chars.next().and_then(|c1| chars.next().map(|c2| format!("{}{}", c1, c2)))
+                            let hex = chars
+                                .next()
+                                .and_then(|c1| chars.next().map(|c2| format!("{}{}", c1, c2)))
                                 .unwrap_or_else(|| "00".to_string());
                             if let Ok(byte) = u8::from_str_radix(&hex, 16) {
                                 result.push(byte as char);
@@ -106,34 +109,47 @@ fn generate_regex_match(regex_str: &str) -> Vec<u8> {
                         _ => result.push(next_char),
                     }
                 }
-            },
+            }
             '[' => {
                 let mut class = String::new();
-                for class_char in chars.by_ref() {  
-                    if class_char == ']' { break; }
+                for class_char in chars.by_ref() {
+                    if class_char == ']' {
+                        break;
+                    }
                     class.push(class_char);
                 }
                 if !class.is_empty() {
-                    result.push(class.chars().nth(rand::thread_rng().gen_range(0..class.len())).unwrap());
+                    result.push(
+                        class
+                            .chars()
+                            .nth(rand::random_range(0..class.len()))
+                            .unwrap(),
+                    );
                 }
-            },
+            }
             '(' => {
                 let mut depth = 1;
-                for group_char in chars.by_ref() { 
-                    if group_char == '(' { depth += 1; }
-                    if group_char == ')' { depth -= 1; }
-                    if depth == 0 { break; }
+                for group_char in chars.by_ref() {
+                    if group_char == '(' {
+                        depth += 1;
+                    }
+                    if group_char == ')' {
+                        depth -= 1;
+                    }
+                    if depth == 0 {
+                        break;
+                    }
                 }
-            },
+            }
             '+' | '*' => {
                 if let Some(last_char) = result.chars().last() {
-                    let repeat = rand::thread_rng().gen_range(0..5);
+                    let repeat = rand::random_range(0..5);
                     for _ in 0..repeat {
                         result.push(last_char);
                     }
                 }
-            },
-            '.' => result.push(rand::thread_rng().gen_range(b'!'..=b'~') as char),
+            }
+            '.' => result.push(rand::random_range(b'!'..=b'~') as char),
             _ => result.push(c),
         }
     }
@@ -161,6 +177,9 @@ mod tests {
         assert_eq!(unescape_string(r"\0\r\n\t").unwrap(), b"\0\r\n\t");
         assert_eq!(unescape_string(r"Incomplete\").unwrap(), b"Incomplete\\");
         assert_eq!(unescape_string(r"Incomplete\x").unwrap(), b"Incomplete\\x");
-        assert_eq!(unescape_string(r"Incomplete\x4").unwrap(), b"Incomplete\\x4");
+        assert_eq!(
+            unescape_string(r"Incomplete\x4").unwrap(),
+            b"Incomplete\\x4"
+        );
     }
 }

@@ -1,7 +1,7 @@
 use clap::Parser;
-use rand::seq::SliceRandom;
-use tokio::net::TcpListener;
+use rand::prelude::IndexedRandom;
 use tokio::io::AsyncWriteExt;
+use tokio::net::TcpListener;
 use tracing::{debug, error, info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -28,8 +28,7 @@ async fn main() -> anyhow::Result<()> {
         .without_time()
         .finish();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     debug!("Parsed CLI flags");
 
@@ -57,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
         // Spawn async thread
         tokio::spawn(async move {
             // Choose random signature
-            let signature = sigs.choose(&mut rand::thread_rng());
+            let signature = sigs.choose(&mut rand::rng());
 
             if let Some(sig) = signature {
                 let payload = generate_payload(sig);
